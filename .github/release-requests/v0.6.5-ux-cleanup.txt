@@ -1,0 +1,1 @@
+Build and test v0.6.5 usability/navigation cleanup. Verify Tkinter UI on Windows before recommending update.
