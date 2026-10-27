@@ -1,0 +1,48 @@
+name: Release ModeShift Windows
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements-build.txt
+      - name: Test
+        run: python -m unittest discover -s tests -v
+      - name: Check version
+        shell: pwsh
+        run: |
+          $v = python -c "import sys;sys.path.insert(0,'src');import updater;print(updater.VERSION)"
+          if ("v$v" -ne "${{ github.ref_name }}") { throw 'Release tag/version mismatch' }
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil src/modeshift.py
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $compiler = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Inno Setup 6\ISCC.exe'
+          $v = python -c "import sys;sys.path.insert(0,'src');import updater;print(updater.VERSION)"
+          & $compiler ('/DAppVersion=' + $v) 'installer\ModeShift.iss'
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
+      - name: Write update manifest
+        shell: pwsh
+        run: |
+          $v = python -c "import sys;sys.path.insert(0,'src');import updater;print(updater.VERSION)"
+          $hash = (Get-FileHash dist/ModeShift.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installerHash = (Get-FileHash dist/ModeShiftSetup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = @{version=$v; url="https://github.com/${{ github.repository }}/releases/download/v$v/ModeShift.exe"; sha256=$hash; installer_url="https://github.com/${{ github.repository }}/releases/download/v$v/ModeShiftSetup.exe"; installer_sha256=$installerHash} | ConvertTo-Json
+          $manifest | Set-Content dist/latest.json -Encoding utf8
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release create "${{ github.ref_name }}" dist/ModeShift.exe dist/ModeShiftSetup.exe dist/latest.json --title "ModeShift ${{ github.ref_name }}" --notes "Windows installer and update files." --verify-tag
