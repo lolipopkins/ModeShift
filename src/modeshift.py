@@ -654,11 +654,31 @@ class App(tk.Tk):
     body=tk.Frame(self,bg=BG);body.pack(fill='both',expand=True)
     nav=tk.Frame(body,bg=NAV,width=202);nav.pack(side='left',fill='y');nav.pack_propagate(False)
     self.navbuttons={}
-    for i,(name,symbol) in enumerate([('Dashboard','⌂'),('Optimizations','☷'),('Presets','◈'),('Automation','⟳'),('Unattended','☾'),('Measurements','▤'),('Snapshots','↶'),('Hardware','▥'),('Settings','⚙')]):
-        b=tk.Button(nav,text=f'  {symbol}    {name}',anchor='w',bg=NAV,fg=MUTED,activebackground=PANEL2,activeforeground=TXT,borderwidth=0,relief='flat',highlightthickness=0,font=(FONT,11),padx=12,pady=13,cursor='hand2',command=lambda n=name:self.navigate(n))
-        b.pack(fill='x',padx=8,pady=(12 if i==0 else 0,0));self.navbuttons[name]=b
+    groups=[
+        ('OVERVIEW',[('Dashboard','⌂'),('Hardware','▥')]),
+        ('WORKFLOWS',[('Optimizations','☷'),('Presets','◈'),('Automation','⟳'),('Unattended','☾')]),
+        ('HISTORY & SETTINGS',[('Measurements','▤'),('Snapshots','↶'),('Settings','⚙')])
+    ]
+    for group,items in groups:
+        self.label(nav,group,9,MUTED,True).pack(anchor='w',padx=19,pady=(17,5))
+        for name,symbol in items:
+            b=tk.Button(nav,text=f'  {symbol}   {name}',anchor='w',bg=NAV,fg=MUTED,activebackground=PANEL2,activeforeground=TXT,borderwidth=0,relief='flat',highlightthickness=0,font=(FONT,10),padx=11,pady=9,cursor='hand2',command=lambda n=name:self.navigate(n))
+            b.pack(fill='x',padx=8,pady=1);self.navbuttons[name]=b
     self.label(nav,'LOCAL • NO SUBSCRIPTION',9,MUTED).pack(side='bottom',pady=13)
+    self.bind_all('<Control-1>',lambda e:self.navigate('Dashboard'))
+    self.bind_all('<Control-2>',lambda e:self.navigate('Optimizations'))
+    self.bind_all('<Control-3>',lambda e:self.navigate('Presets'))
+    self.bind_all('<Control-4>',lambda e:self.navigate('Automation'))
+    self.bind_all('<Control-f>',self.focus_optimization_search)
+    self.bind_all('<F5>',lambda e:self.check_updates_background() if self.active=='Settings' else self.navigate(self.active))
     self.content=tk.Frame(body,bg=BG);self.content.pack(side='left',fill='both',expand=True)
+ def focus_optimization_search(self,event=None):
+    if self.active!='Optimizations':
+        self.navigate('Optimizations')
+    if hasattr(self,'optimization_search_entry') and self.optimization_search_entry.winfo_exists():
+        self.optimization_search_entry.focus_set()
+        self.optimization_search_entry.selection_range(0,'end')
+    return 'break'
  def navigate(self,name):
     self._set_scroll_canvas(None)
     self.active=name
@@ -666,7 +686,7 @@ class App(tk.Tk):
     self.clear(self.content)
     head=tk.Frame(self.content,bg=BG);head.pack(fill='x',padx=32,pady=(23,15))
     self.label(head,name+('  •  '+str(len(TWEAKS))+' controls' if name=='Optimizations' else ''),23,TXT,True).pack(side='left')
-    self.label(head,'Your system. Your workflows. Your control.',10,MUTED).pack(side='right',pady=10)
+    self.label(head,'Ctrl+1 Dashboard    Ctrl+2 Optimizations    Ctrl+F Search',9,MUTED).pack(side='right',pady=10)
     page=tk.Frame(self.content,bg=BG);page.pack(fill='both',expand=True,padx=32,pady=(0,18))
     getattr(self,'page_'+name.lower())(page)
  def notice(self,parent,msg,color=MUTED):
@@ -752,6 +772,7 @@ class App(tk.Tk):
     self.searchvar=tk.StringVar(value=self.query)
     entry=tk.Entry(top,textvariable=self.searchvar,bg=PANEL2,fg=TXT,insertbackground=TXT,relief='flat',font=(FONT,11),width=34)
     entry.pack(side='left',ipady=11,padx=(0,12));entry.bind('<KeyRelease>',lambda e:self.refresh_tweaks())
+    self.optimization_search_entry=entry
     self.btn(top,'Review changes',self.review_changes,True).pack(side='right')
     self.btn(top,'Clear selection',lambda:(self.scheduled.clear(),self.refresh_tweaks())).pack(side='right',padx=9)
     cats=tk.Frame(p,bg=BG);cats.pack(fill='x',pady=(13,12))
