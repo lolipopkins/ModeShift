@@ -516,6 +516,65 @@ class Backend:
     log(f'UNDO {snap["label"]}')
     return snap
 
+class RoundedPanel(tk.Frame):
+    """Frame with clipped-looking rounded outer corners; hosts ordinary Tk widgets."""
+    def __init__(self, master, radius=14, **kw):
+        kw.pop('highlightbackground',None);kw.pop('highlightthickness',None)
+        super().__init__(master,bg=PANEL,bd=0,highlightthickness=0,**kw)
+        self._r=radius;self._corners=[]
+        self.bind('<Configure>',self._shape,add='+')
+    def _shape(self,event=None):
+        r=self._r; w=self.winfo_width();h=self.winfo_height()
+        if w<2*r or h<2*r:return
+        if not self._corners:
+            outer=self.master.cget('bg')
+            for _ in range(4):
+                self._corners.append(tk.Canvas(self,width=r,height=r,bg=outer,bd=0,highlightthickness=0))
+        for i,c in enumerate(self._corners):
+            x=0 if i%2==0 else w-r
+            y=0 if i<2 else h-r
+            c.place(x=x,y=y);c.delete('all')
+            ox=0 if i%2==0 else -r;oy=0 if i<2 else -r
+            c.create_oval(ox,oy,ox+2*r,oy+2*r,fill=PANEL,outline=PANEL)
+
+class SoftButton(tk.Canvas):
+    """Rounded Canvas button compatible with existing pack/grid and state controls."""
+    def __init__(self,master,text,command,accent=False,width=None):
+        import tkinter.font as tkfont
+        self._text=text;self._command=command;self._accent=accent;self._enabled=True
+        self._hover=False;self._font=tkfont.Font(family=FONT,size=10,weight='bold')
+        w=max(96,self._font.measure(text)+34)
+        if width:w=max(w,int(width)*11)
+        super().__init__(master,width=w,height=42,bg=master.cget('bg'),bd=0,highlightthickness=0,cursor='hand2')
+        self.bind('<Configure>',lambda e:self._draw())
+        self.bind('<Enter>',lambda e:self._sethover(True))
+        self.bind('<Leave>',lambda e:self._sethover(False))
+        self.bind('<ButtonRelease-1>',self._click)
+        self._draw()
+    def _sethover(self,value):self._hover=value;self._draw()
+    def _draw(self):
+        self.delete('all');w=max(2,self.winfo_width());h=max(2,self.winfo_height());r=12
+        color=(ACC if self._accent else PANEL2)
+        if not self._enabled:color=LINE
+        elif self._hover:color='#ffc261' if self._accent else LINE
+        pts=[r,0,w-r,0,w,r,w,h-r,w-r,h,r,h,0,h-r,0,r]
+        self.create_polygon(pts,smooth=True,splinesteps=12,fill=color,outline='')
+        self.create_text(w/2,h/2,text=self._text,fill=BG if self._accent else TXT,font=self._font)
+    def _click(self,e):
+        if self._enabled and 0<=e.x<=self.winfo_width() and 0<=e.y<=self.winfo_height():self._command()
+    def configure(self,cnf=None,**kw):
+        if 'text' in kw:self._text=kw.pop('text')
+        if 'command' in kw:self._command=kw.pop('command')
+        if 'state' in kw:self._enabled=kw.pop('state')!='disabled'
+        if 'bg' in kw:kw.pop('bg')
+        if 'fg' in kw:kw.pop('fg')
+        if 'width' in kw:kw.pop('width')
+        result=super().configure(cnf,**kw) if kw or cnf else None
+        if hasattr(self,'_text'):self._draw()
+        return result
+    config=configure
+
+
 class App(tk.Tk):
  def __init__(self):
     super().__init__();self.backend=Backend();self.title('ModeShift — Workstation Control')
@@ -531,6 +590,10 @@ class App(tk.Tk):
     self.samples=[];self.last_sample_epoch=None;self.last_guard_log=0;self.guard_last_alert='Not sampled yet'
     self.measurement_running=False;self.measurement_rows=[];self.measurement_sessions=self.load_measurements()
     self.update_release=None;self.update_busy=False;self.auto_candidate=None;self.auto_hits=0;self.auto_next_retry=0;self.auto_original_power=None;self.auto_applied_power=None;self.auto_profile=None
+    self._scroll_canvas=None;self._scroll_target=None;self._scroll_timer=None
+    self.bind_all('<MouseWheel>',self._smooth_wheel,add='+')
+    self.bind_all('<Button-4>',self._smooth_wheel,add='+')
+    self.bind_all('<Button-5>',self._smooth_wheel,add='+')
     self.build_shell();self.navigate('Dashboard');self.after(1000,self.tick);self.after(2800,self.check_updates_background)
     if os.name!='nt':self.after(400,lambda:messagebox.showinfo('Preview mode','This environment is not Windows. You can preview the UI, but registry and power changes only run on Windows.'))
  def setup_theme(self):
@@ -543,12 +606,42 @@ class App(tk.Tk):
  def label(self,parent,s,size=11,fg=TXT,bold=False,**kw):
     return tk.Label(parent,text=s,font=(FONT,size,'bold' if bold else 'normal'),fg=fg,bg=parent['bg'],**kw)
  def btn(self,parent,s,command,accent=False,width=None):
-    b=tk.Button(parent,text=s,command=command,bg=ACC if accent else PANEL2,fg=BG if accent else TXT,activebackground='#fbc06a' if accent else '#283a55',activeforeground=BG if accent else TXT,bd=0,relief='flat',font=(FONT,10,'bold'),cursor='hand2',padx=17,pady=11,highlightthickness=0)
-    if width:b.configure(width=width)
-    return b
+    return SoftButton(parent,s,command,accent,width)
  def clear(self,parent):
     for c in parent.winfo_children():c.destroy()
- def card(self,parent,**kw):return tk.Frame(parent,bg=PANEL,highlightbackground=LINE,highlightthickness=1,**kw)
+ def card(self,parent,**kw):return RoundedPanel(parent,radius=14,**kw)
+ def _smooth_wheel(self,event):
+    cv=self._scroll_canvas
+    if cv is None or not cv.winfo_exists():return
+    widget=self.winfo_containing(event.x_root,event.y_root)
+    while widget is not None and widget != cv:
+        widget=widget.master
+    if widget != cv:return
+    if getattr(event,'num',None)==4:steps=-1.
+    elif getattr(event,'num',None)==5:steps=1.
+    else:
+        delta=event.delta
+        if not delta:return
+        steps=-delta/120. if abs(delta)>=120 else -delta/40.
+    top,bottom=cv.yview()
+    target=top if self._scroll_target is None else self._scroll_target
+    self._scroll_target=min(max(0.,target+steps*.055),max(0.,1-(bottom-top)))
+    if self._scroll_timer is None:self._animate_scroll()
+    return 'break'
+ def _animate_scroll(self):
+    cv=self._scroll_canvas
+    if cv is None or not cv.winfo_exists() or self._scroll_target is None:
+        self._scroll_timer=None;return
+    pos=cv.yview()[0];target=self._scroll_target
+    nxt=pos+(target-pos)*.3
+    if abs(nxt-target)<.0009:nxt=target
+    cv.yview_moveto(nxt)
+    self._scroll_timer=None if nxt==target else self.after(12,self._animate_scroll)
+ def _set_scroll_canvas(self,canvas):
+    if self._scroll_timer is not None:
+        try:self.after_cancel(self._scroll_timer)
+        except (ValueError,tk.TclError):pass
+    self._scroll_timer=None;self._scroll_target=None;self._scroll_canvas=canvas
  def build_shell(self):
     top=tk.Frame(self,bg=BG,height=48);top.pack(side='top',fill='x');top.pack_propagate(False)
     self.label(top,'◈  MODESHIFT',15,TXT,True).pack(side='left',padx=24)
@@ -567,6 +660,7 @@ class App(tk.Tk):
     self.label(nav,'LOCAL • NO SUBSCRIPTION',9,MUTED).pack(side='bottom',pady=13)
     self.content=tk.Frame(body,bg=BG);self.content.pack(side='left',fill='both',expand=True)
  def navigate(self,name):
+    self._set_scroll_canvas(None)
     self.active=name
     for key,b in self.navbuttons.items():b.configure(bg=PANEL2 if key==name else NAV,fg=ACC if key==name else MUTED)
     self.clear(self.content)
