@@ -694,13 +694,11 @@ class App(tk.Tk):
  def page_dashboard(self,p):
     hero=self.card(p);hero.pack(fill='x',pady=(0,14))
     lead=tk.Frame(hero,bg=PANEL);lead.pack(side='left',fill='both',expand=True,padx=23,pady=18)
-    self.label(lead,'YOUR PC. ONE CONTROL CENTER.',10,ACC,True).pack(anchor='w')
-    self.label(lead,'Find your flow.',25,TXT,True).pack(anchor='w',pady=(5,6))
-    self.label(lead,'Swap workloads in seconds. Every manual optimization is previewed and backed up.',10,MUTED,wraplength=670,justify='left').pack(anchor='w')
-    actions=tk.Frame(hero,bg=PANEL);actions.pack(side='right',padx=22)
-    self.btn(actions,'All optimizations  →',lambda:self.navigate('Optimizations')).pack(pady=6)
-    self.btn(actions,'Smart Scan  ✦',self.show_smart_scan).pack(pady=6)
-    self.btn(actions,'Snapshots  ↶',lambda:self.navigate('Snapshots')).pack(pady=6)
+    self.label(lead,'SYSTEM OVERVIEW',10,ACC,True).pack(anchor='w')
+    self.label(lead,'Ready for your next workflow.',23,TXT,True).pack(anchor='w',pady=(5,6))
+    self.label(lead,'Monitor your PC, choose a mode, or review recommended improvements.',10,MUTED,wraplength=670,justify='left').pack(anchor='w')
+    actions=tk.Frame(hero,bg=PANEL);actions.pack(side='right',padx=20)
+    self.btn(actions,'Run Smart Scan  ✦',self.show_smart_scan,True).pack(pady=6)
     metrics=tk.Frame(p,bg=BG);metrics.pack(fill='x',pady=(0,14));self.metric_labels={}
     for idx,name in enumerate(('CPU','Memory','Disk','GPU')):
         metrics.grid_columnconfigure(idx,weight=1,uniform='metric')
@@ -710,9 +708,9 @@ class App(tk.Tk):
     workspace=tk.Frame(p,bg=BG);workspace.pack(fill='both',expand=True)
     left=self.card(workspace);left.pack(side='left',fill='both',expand=True,padx=(0,7))
     right=self.card(workspace);right.pack(side='left',fill='both',expand=True,padx=(7,0))
-    self.label(left,'QUICK MODES',10,ACC,True).pack(anchor='w',padx=18,pady=(15,3))
-    self.label(left,'What are you doing?',18,TXT,True).pack(anchor='w',padx=18,pady=(0,4))
-    self.label(left,'Apply a safe preset with a confirmation and restore point.',9,MUTED).pack(anchor='w',padx=18,pady=(0,8))
+    self.label(left,'WORKLOAD MODES',10,ACC,True).pack(anchor='w',padx=18,pady=(15,3))
+    self.label(left,'Choose your focus',18,TXT,True).pack(anchor='w',padx=18,pady=(0,4))
+    self.label(left,'Select a mode to preview its changes before applying.',9,MUTED).pack(anchor='w',padx=18,pady=(0,8))
     modes=[('🎮','Gaming','Minimize distractions while playing'),('▣','3D / Rendering','Focus your workstation on render jobs'),
            ('⌘','Roblox Studio / Dev','Build, compile and create'),('▤','Work / Productivity','Focus, files and multitasking'),
            ('☾','Quiet / Battery','Favor efficiency and quiet operation')]
@@ -730,11 +728,9 @@ class App(tk.Tk):
                       command=self.dashboard_auto_change,bg=PANEL,fg=TXT,activebackground=PANEL,
                       activeforeground=TXT,selectcolor=PANEL2,font=(FONT,11),anchor='w')
     cb.pack(anchor='w',pady=3)
-    self.label(auto,'Opt-in • Power plans only • Works while ModeShift is open',9,MUTED).pack(anchor='w')
-    self.btn(auto,'Configure auto rules →',lambda:self.navigate('Automation')).pack(anchor='w',pady=(7,4))
-    self.btn(auto,'Unattended Dev + Rendering guard →',lambda:self.navigate('Unattended'),True).pack(anchor='w',pady=(5,6))
+    self.label(auto,'Power-plan switching only. Configure advanced rules under Automation.',9,MUTED).pack(anchor='w')
     self.label(right,'SYSTEM INSIGHTS',10,ACC,True).pack(anchor='w',padx=18,pady=(15,3))
-    self.label(right,'Recommendations for you',17,TXT,True).pack(anchor='w',padx=18,pady=(0,12))
+    self.label(right,'Current system insights',17,TXT,True).pack(anchor='w',padx=18,pady=(0,12))
     self.recs_frame=tk.Frame(right,bg=PANEL);self.recs_frame.pack(fill='both',expand=True)
     self.update_recommendations()
     self.spark=tk.Canvas(p,bg=PANEL,height=86,highlightthickness=1,highlightbackground=LINE)
