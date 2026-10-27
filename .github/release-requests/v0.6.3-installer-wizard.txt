@@ -1,0 +1,1 @@
+Release v0.6.3: manual installer no longer auto-launches ModeShift, logs setup, and retains visible wizard pages. Verify on Windows before marking stable.
