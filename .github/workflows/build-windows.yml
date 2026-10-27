@@ -1,10 +1,8 @@
-name: Build ModeShift for Windows
+name: Build ModeShift Windows EXE
 on:
   workflow_dispatch:
   push:
     branches: [main]
-permissions:
-  contents: read
 jobs:
   build:
     runs-on: windows-latest
@@ -14,24 +12,24 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: python -m pip install -r requirements-build.txt
-      - name: Test
+        run: pip install -r requirements-build.txt
+      - name: Run tests
         run: python -m unittest discover -s tests -v
-      - name: Build EXE
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil src/modeshift.py
+      - name: Build Windows executable
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil src/modeshift.py
       - name: Install Inno Setup
         shell: pwsh
-        run: choco install innosetup --no-progress -y
-      - name: Build installer
+        run: choco install innosetup --no-progress --yes
+      - name: Build setup installer
         shell: pwsh
         run: |
-          $compiler = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Inno Setup 6\ISCC.exe'
-          $version = python -c "import sys;sys.path.insert(0,'src');import updater;print(updater.VERSION)"
-          & $compiler ('/DAppVersion=' + $version) 'installer\ModeShift.iss'
-          if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
+          $iscc = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Inno Setup 6\ISCC.exe'
+          $v = python -c "import sys;sys.path.insert(0,'src');import updater;print(updater.VERSION)"
+          & $iscc ('/DAppVersion=' + $v) 'installer\ModeShift.iss'
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
       - uses: actions/upload-artifact@v4
         with:
-          name: ModeShift-Windows
+          name: ModeShift-Windows-EXE
           path: |
             dist/ModeShift.exe
             dist/ModeShiftSetup.exe

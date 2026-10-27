@@ -1,0 +1,10 @@
+# ModeShift GitHub one-click update setup
+
+1. Create a **public** repository named `ModeShift` under GitHub account `lolipopkins`. Public is required for simple credential-free updates. Never upload credentials or private user data. Alternatively use a private repository, but then this unauthenticated updater cannot download its release assets; it needs a different authenticated delivery design.
+2. Upload the **contents** of this folder to the root of the repository, preserving `.github/workflows/release-windows.yml`.
+3. In Settings → Actions → General, permit Actions and make sure workflow permissions allow read and write access to repository contents, if GitHub refuses release publication.
+4. From the repository, create a tag `v0.5.4` pointing to the latest commit (or run `git tag v0.5.4; git push origin v0.5.4`). This triggers a Windows build, tests, manifest creation, and GitHub Release publication.
+5. Verify the release contains `ModeShift.exe`, `ModeShiftSetup.exe`, **and** `latest.json`, then download and run the installer `ModeShiftSetup.exe`. On the Settings page, the default feed URL is `https://github.com/lolipopkins/ModeShift/releases/latest/download/latest.json`. Press Check for Updates to verify. The first release itself will correctly report you're current.
+6. For future updates, increment `VERSION` in `src/updater.py` (e.g. 0.5.4), upload changed source and tag `v0.5.4`. Inside the running earlier ModeShift, press Check for Updates → Update Now.
+
+**Security and limits:** The SHA-256 digest confirms integrity against the published manifest, not authenticity if the GitHub account is compromised. Never run unreviewed PR code with write-enabled release tokens. This updater uses a portable EXE in a writable folder; if the EXE is under Program Files, updates may fail without permissions. Real Windows end-to-end testing and code signing are still outstanding. Back up `%LOCALAPPDATA%\ModeShift` before first update. A new Windows build cannot be shipped by ChatGPT alone; it must be published to the GitHub Release.
