@@ -1,0 +1,1 @@
+Publish ModeShift v0.6.0 after Windows tests and installer build succeed.
