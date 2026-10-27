@@ -63,4 +63,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release create '${{ github.ref_name }}' dist/ModeShift.exe dist/ModeShiftSetup.exe dist/latest.json --title 'ModeShift ${{ github.ref_name }}' --notes 'Windows setup installer + portable EXE. The application saves your settings in %LOCALAPPDATA%\ModeShift. Keep a backup before updating.' --verify-tag
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag dist/ModeShift.exe dist/ModeShiftSetup.exe dist/latest.json --clobber
+          } else {
+            gh release create $tag dist/ModeShift.exe dist/ModeShiftSetup.exe dist/latest.json --title "ModeShift $tag" --notes "Windows setup installer and portable EXE; settings preserved in AppData." --verify-tag
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Release publishing failed" }
