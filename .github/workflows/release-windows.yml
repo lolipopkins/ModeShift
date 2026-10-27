@@ -34,7 +34,10 @@ jobs:
           if ("v$version" -ne '${{ github.ref_name }}') { throw "Tag doesn't match application version $version" }
       - name: Build portable Windows EXE
         shell: pwsh
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil src/modeshift.py
+        run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil src/modeshift.py
+      - name: Build portable EXE separately
+        shell: pwsh
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --distpath dist-portable --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil src/modeshift.py
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress --yes
@@ -51,7 +54,7 @@ jobs:
         shell: pwsh
         run: |
           $installerHash = (Get-FileHash -Algorithm SHA256 dist/ModeShiftSetup.exe).Hash.ToLowerInvariant()
-          $hash = (Get-FileHash -Algorithm SHA256 dist/ModeShift.exe).Hash.ToLowerInvariant()
+          $hash = (Get-FileHash -Algorithm SHA256 dist-portable/ModeShift.exe).Hash.ToLowerInvariant()
           $v = python -c "import sys;sys.path.insert(0,'src');import updater;print(updater.VERSION)"
           $manifest = @{ version=$v; url="https://github.com/${{ github.repository }}/releases/download/v$v/ModeShift.exe"; sha256=$hash; installer_url="https://github.com/${{ github.repository }}/releases/download/v$v/ModeShiftSetup.exe"; installer_sha256=$installerHash; notes="ModeShift v$v Windows portable release" } | ConvertTo-Json
           $manifest | Set-Content -Path dist/latest.json -Encoding utf8
@@ -59,7 +62,8 @@ jobs:
         with:
           name: ModeShift-Windows-EXE
           path: |
-            dist/ModeShift.exe
+            dist-portable/ModeShift.exe
+            dist/ModeShift/**
             dist/ModeShiftSetup.exe
             dist/latest.json
       - name: Publish GitHub Release
@@ -70,8 +74,8 @@ jobs:
           $version = python -c "import sys;sys.path.insert(0,'src');import updater;print(updater.VERSION)"
           $tag = "v$version"
           if (gh release view $tag 2>$null) {
-            gh release upload $tag dist/ModeShift.exe dist/ModeShiftSetup.exe dist/latest.json --clobber
+            gh release upload $tag dist-portable/ModeShift.exe dist/ModeShiftSetup.exe dist/latest.json --clobber
           } else {
-            gh release create $tag dist/ModeShift.exe dist/ModeShiftSetup.exe dist/latest.json --title "ModeShift $tag" --notes "Windows setup installer and portable EXE; settings preserved in AppData." --target $env:GITHUB_SHA
+            gh release create $tag dist-portable/ModeShift.exe dist/ModeShiftSetup.exe dist/latest.json --title "ModeShift $tag" --notes "Windows setup installer and portable EXE; settings preserved in AppData." --target $env:GITHUB_SHA
           }
           if ($LASTEXITCODE -ne 0) { throw "Release publishing failed" }
