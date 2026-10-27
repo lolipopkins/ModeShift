@@ -13,7 +13,7 @@ AppPublisher=ModeShift
 DefaultDirName={localappdata}\Programs\ModeShift
 DefaultGroupName=ModeShift
 PrivilegesRequired=lowest
-DisableProgramGroupPage=yes
+DisableProgramGroupPage=no
 OutputDir=..\dist
 OutputBaseFilename=ModeShiftSetup
 Compression=lzma2
@@ -31,6 +31,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
 UsePreviousAppDir=no
+SetupLogging=yes
 
 [Files]
 Source: "..\dist\ModeShift\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -42,8 +43,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Name: "{autoprograms}\ModeShift"; Filename: "{app}\ModeShift.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\ModeShift"; Filename: "{app}\ModeShift.exe"; Tasks: desktopicon; WorkingDir: "{app}"
 
-[Run]
-Filename: "{app}\ModeShift.exe"; Description: "Launch ModeShift"; Flags: nowait postinstall skipifsilent
+; No automatic launch: the manual installer must finish visibly before ModeShift opens.
 
 ; Presets, snapshots, history and guard logs live in
 ; %LOCALAPPDATA%\ModeShift, NOT in the installation directory.
