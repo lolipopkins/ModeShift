@@ -1,0 +1,1 @@
+Build ModeShift v0.6.6; consolidated dashboard controls and removed redundant navigation buttons. Requires successful tests and Windows startup validation.
