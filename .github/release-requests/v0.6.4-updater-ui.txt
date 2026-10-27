@@ -1,0 +1,1 @@
+Release v0.6.4 with redesigned compact rounded update notification. Windows GUI smoke validation required.
