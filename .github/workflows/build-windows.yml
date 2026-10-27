@@ -27,14 +27,12 @@ jobs:
           $v = python -c "import sys;sys.path.insert(0,'src');import updater;print(updater.VERSION)"
           & $iscc ('/DAppVersion=' + $v) 'installer\ModeShift.iss'
           if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
-      - name: Upload installer (recommended)
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: ModeShift-INSTALLER
           path: dist/ModeShiftSetup.exe
           if-no-files-found: error
-      - name: Upload portable executable (no setup wizard)
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: ModeShift-PORTABLE
           path: dist/ModeShift.exe

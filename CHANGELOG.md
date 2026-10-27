@@ -1,3 +1,7 @@
+## v0.6.0 (development; Windows verification pending)
+- Update toast, theme selector, basic approval-first Smart Scan, installer-aware updating.
+- Added installer upgrade tests.
+
 # Changelog
 
 ## v0.5.4 (installer infrastructure)

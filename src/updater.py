@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib, json, os, re, subprocess, sys, tempfile, urllib.request
 from pathlib import Path
 
-VERSION = '0.5.4'
+VERSION = '0.6.0'
 MAX_MANIFEST = 32_768
 MAX_EXE = 400 * 1024 * 1024
 
@@ -48,7 +48,10 @@ def check(manifest_url):
     sha=data.get('sha256')
     if not isinstance(sha,str) or not re.fullmatch('[a-fA-F0-9]{64}',sha):
         raise ValueError('Manifest must contain a SHA-256 digest')
-    return {'version':release_version,'url':download,'sha256':sha.lower(),
+    installer_url=data.get('installer_url');installer_sha=data.get('installer_sha256')
+    if installer_url is not None:safe_https(installer_url)
+    if installer_sha is not None and (not isinstance(installer_sha,str) or not re.fullmatch('[a-fA-F0-9]{64}',installer_sha)):raise ValueError('Invalid installer digest')
+    return {'installer_url':installer_url,'installer_sha256':installer_sha.lower() if installer_sha else None,'version':release_version,'url':download,'sha256':sha.lower(),
             'notes':str(data.get('notes',''))[:1200],
             'available':version_parts(release_version)>version_parts(VERSION)}
 
@@ -98,6 +101,40 @@ try {{
 def start_replacement(target,staged,digest,folder):
     if os.name!='nt':raise RuntimeError('Windows is required to install an update')
     script=make_replacement_script(target,staged,digest,os.getpid(),folder)
+    subprocess.Popen(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(script)],
+                     creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),close_fds=True)
+    return script
+
+
+def make_installer_script(target, installer, expected_sha, pid, folder):
+    """Create a local helper to run a verified Inno Setup upgrade after app exits.
+
+    Installed upgrade is not an in-place EXE move: it must run the installer to
+    maintain the uninstall registry and shortcuts. User data is outside app dir.
+    """
+    target=Path(target).resolve();installer=Path(installer).resolve()
+    if not target.is_file() or target.name.lower()!='modeshift.exe' or not installer.is_file():
+        raise ValueError('Invalid installed application or installer')
+    if not re.fullmatch('[a-f0-9]{64}',expected_sha):raise ValueError('Invalid installer digest')
+    def q(p):return "'"+str(p).replace("'","''")+"'"
+    script=Path(folder)/'upgrade_modeshift.ps1'
+    script.write_text(f'''$ErrorActionPreference = 'Stop'
+$exe = {q(target)}
+$installer = {q(installer)}
+$expected = '{expected_sha}'
+try {{ Wait-Process -Id {int(pid)} -Timeout 60 -ErrorAction SilentlyContinue }} catch {{}}
+Start-Sleep -Milliseconds 800
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant() -ne $expected) {{ exit 3 }}
+$job = Start-Process -FilePath $installer -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS' -PassThru -Wait
+if ($job.ExitCode -ne 0) {{ exit $job.ExitCode }}
+if (Test-Path -LiteralPath $exe) {{ Start-Process -FilePath $exe }}
+''',encoding='utf-8')
+    return script
+
+
+def start_installer_upgrade(target,installer,digest,folder):
+    if os.name!='nt':raise RuntimeError('Windows is required')
+    script=make_installer_script(target,installer,digest,os.getpid(),folder)
     subprocess.Popen(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(script)],
                      creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),close_fds=True)
     return script

@@ -26,6 +26,17 @@ STATE_FILE = ROOT / 'state.json'
 LOG_FILE = ROOT / 'activity.log'
 BG='#080e19'; PANEL='#101b2b'; PANEL2='#1b2a40'; LINE='#253750'; TXT='#f0f5ff'; MUTED='#96a9c3'; ACC='#ffad38'; BLUE='#4b8fff'; GOOD='#2fdfaa'; BAD='#fa817c'
 FONT='Segoe UI'
+THEMES={
+ 'Amber Night':('#080e19','#101b2b','#1b2a40','#253750','#f0f5ff','#96a9c3','#ffad38','#0c1625'),
+ 'Arctic Blue':('#091321','#102239','#1a3350','#2e4868','#f1f7ff','#a5bdd4','#66b7ff','#102037'),
+ 'Graphite':('#101113','#1b1d21','#2a2d32','#3b4048','#f4f4f5','#abb0bb','#d4d8df','#181a1d'),
+ 'Forest':('#091610','#11251b','#20372b','#325343','#f2fff7','#a9caba','#80e7aa','#10231b'),
+ 'Crimson':('#180b12','#2c1420','#40202f','#5b3041','#fff0f4','#d5a9b7','#ff769c','#24111b'),
+}
+def use_theme(name):
+ global BG,PANEL,PANEL2,LINE,TXT,MUTED,ACC,NAV
+ BG,PANEL,PANEL2,LINE,TXT,MUTED,ACC,NAV=THEMES.get(name,THEMES['Amber Night'])
+
 
 def log(s):
     with LOG_FILE.open('a',encoding='utf-8') as f:
@@ -514,13 +525,13 @@ class App(tk.Tk):
             location=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[1]))/'assets'/'modeshift.ico'
             if location.is_file():self.iconbitmap(str(location))
         except (OSError,tk.TclError):pass
-    self.option_add('*Font',(FONT,10));self.setup_theme();self.protocol('WM_DELETE_WINDOW',self.close_app)
+    use_theme(self.backend.data.get('theme','Amber Night'));self.option_add('*Font',(FONT,10));self.setup_theme();self.protocol('WM_DELETE_WINDOW',self.close_app)
     self.active='Dashboard';self.category='All';self.query='';self.scheduled={};self.current_preset=tk.StringVar(value='Balanced')
     self.telemetry=TelemetrySampler()
     self.samples=[];self.last_sample_epoch=None;self.last_guard_log=0;self.guard_last_alert='Not sampled yet'
     self.measurement_running=False;self.measurement_rows=[];self.measurement_sessions=self.load_measurements()
     self.update_release=None;self.update_busy=False;self.auto_candidate=None;self.auto_hits=0;self.auto_next_retry=0;self.auto_original_power=None;self.auto_applied_power=None;self.auto_profile=None
-    self.build_shell();self.navigate('Dashboard');self.after(1000,self.tick)
+    self.build_shell();self.navigate('Dashboard');self.after(1000,self.tick);self.after(2800,self.check_updates_background)
     if os.name!='nt':self.after(400,lambda:messagebox.showinfo('Preview mode','This environment is not Windows. You can preview the UI, but registry and power changes only run on Windows.'))
  def setup_theme(self):
     style=ttk.Style(self)
@@ -539,22 +550,25 @@ class App(tk.Tk):
     for c in parent.winfo_children():c.destroy()
  def card(self,parent,**kw):return tk.Frame(parent,bg=PANEL,highlightbackground=LINE,highlightthickness=1,**kw)
  def build_shell(self):
-    top=tk.Frame(self,bg='#080d18',height=48);top.pack(side='top',fill='x');top.pack_propagate(False)
+    top=tk.Frame(self,bg=BG,height=48);top.pack(side='top',fill='x');top.pack_propagate(False)
     self.label(top,'◈  MODESHIFT',15,TXT,True).pack(side='left',padx=24)
-    self.label(top,'WORKLOAD CONTROL  /  v0.5.2',9,MUTED).pack(side='left',padx=12)
+    self.label(top,'WORKLOAD CONTROL  /  v'+updater.VERSION,9,MUTED).pack(side='left',padx=12)
     self.admin_label=self.label(top,'●  '+('Admin' if is_admin() else 'Standard user'),10,GOOD if is_admin() else MUTED)
     self.admin_label.pack(side='right',padx=24)
+    self.top_update_btn=self.btn(top,'↻  Check updates',self.check_updates_background)
+    self.top_update_btn.pack(side='right',padx=12,pady=5)
+    self.update_toast=None
     body=tk.Frame(self,bg=BG);body.pack(fill='both',expand=True)
-    nav=tk.Frame(body,bg='#0c1625',width=202);nav.pack(side='left',fill='y');nav.pack_propagate(False)
+    nav=tk.Frame(body,bg=NAV,width=202);nav.pack(side='left',fill='y');nav.pack_propagate(False)
     self.navbuttons={}
     for i,(name,symbol) in enumerate([('Dashboard','⌂'),('Optimizations','☷'),('Presets','◈'),('Automation','⟳'),('Unattended','☾'),('Measurements','▤'),('Snapshots','↶'),('Hardware','▥'),('Settings','⚙')]):
-        b=tk.Button(nav,text=f'  {symbol}    {name}',anchor='w',bg='#0c1625',fg=MUTED,activebackground=PANEL2,activeforeground=TXT,borderwidth=0,relief='flat',highlightthickness=0,font=(FONT,11),padx=12,pady=13,cursor='hand2',command=lambda n=name:self.navigate(n))
+        b=tk.Button(nav,text=f'  {symbol}    {name}',anchor='w',bg=NAV,fg=MUTED,activebackground=PANEL2,activeforeground=TXT,borderwidth=0,relief='flat',highlightthickness=0,font=(FONT,11),padx=12,pady=13,cursor='hand2',command=lambda n=name:self.navigate(n))
         b.pack(fill='x',padx=8,pady=(12 if i==0 else 0,0));self.navbuttons[name]=b
     self.label(nav,'LOCAL • NO SUBSCRIPTION',9,MUTED).pack(side='bottom',pady=13)
     self.content=tk.Frame(body,bg=BG);self.content.pack(side='left',fill='both',expand=True)
  def navigate(self,name):
     self.active=name
-    for key,b in self.navbuttons.items():b.configure(bg=PANEL2 if key==name else '#0c1625',fg=ACC if key==name else MUTED)
+    for key,b in self.navbuttons.items():b.configure(bg=PANEL2 if key==name else NAV,fg=ACC if key==name else MUTED)
     self.clear(self.content)
     head=tk.Frame(self.content,bg=BG);head.pack(fill='x',padx=32,pady=(23,15))
     self.label(head,name+('  •  '+str(len(TWEAKS))+' controls' if name=='Optimizations' else ''),23,TXT,True).pack(side='left')
@@ -571,6 +585,7 @@ class App(tk.Tk):
     self.label(lead,'Swap workloads in seconds. Every manual optimization is previewed and backed up.',10,MUTED,wraplength=670,justify='left').pack(anchor='w')
     actions=tk.Frame(hero,bg=PANEL);actions.pack(side='right',padx=22)
     self.btn(actions,'All optimizations  →',lambda:self.navigate('Optimizations')).pack(pady=6)
+    self.btn(actions,'Smart Scan  ✦',self.show_smart_scan).pack(pady=6)
     self.btn(actions,'Snapshots  ↶',lambda:self.navigate('Snapshots')).pack(pady=6)
     metrics=tk.Frame(p,bg=BG);metrics.pack(fill='x',pady=(0,14));self.metric_labels={}
     for idx,name in enumerate(('CPU','Memory','Disk','GPU')):
@@ -1033,7 +1048,12 @@ class App(tk.Tk):
         self.processinfo.configure(text='Most memory-intensive processes:\n'+'\n'.join(f'  {x["name"][:42]:42s}  {x["ram_gib"]:5.2f} GiB' for x in processes[:9]))
     self.after(5000,self.update_process)
  def page_settings(self,p):
-    self.notice(p,'ModeShift runs locally. No accounts or telemetry uploads. Optional manual updates require a user-configured HTTPS release source.')
+    self.notice(p,'Runs locally. No subscription or telemetry upload. Changes always require approval.')
+    themes=self.card(p);themes.pack(fill='x',pady=(0,12))
+    self.label(themes,'APPEARANCE  /  THEMES',13,ACC,True).pack(anchor='w',padx=17,pady=(12,6))
+    sel=ttk.Combobox(themes,values=list(THEMES),state='readonly',width=28)
+    sel.set(self.backend.data.get('theme','Amber Night'));sel.pack(anchor='w',padx=17,pady=(0,12))
+    sel.bind('<<ComboboxSelected>>',lambda e:self.set_theme(sel.get()))
     for name,cmd in [('Open ModeShift data folder',lambda:self.open_folder(ROOT)),('Export presets to JSON',self.export_presets),('Import presets from JSON',self.import_presets),('Read activity log',lambda:self.open_folder(LOG_FILE.parent)),('Export diagnostics to JSON',self.export_diagnostics),('Refresh hardware / UI',lambda:self.navigate('Hardware'))]:
         self.btn(p,name,cmd).pack(anchor='w',pady=7)
     upgrade=self.card(p);upgrade.pack(fill='x',pady=(20,12))
@@ -1050,6 +1070,72 @@ class App(tk.Tk):
     self.update_status.pack(anchor='w',padx=17,pady=(0,13))
     self.label(p,'Permissions and compatibility',15,TXT,True).pack(anchor='w',pady=(25,8))
     self.label(p,'Registry switches shown here are per-user. Windows builds and group policies can override them. Power scheme availability varies by PC. No optimizer can promise extra FPS or solve RAM-heavy applications without workload changes or hardware upgrades.',10,MUTED,wraplength=800,justify='left').pack(anchor='w')
+ def set_theme(self,name):
+    if name not in THEMES:return
+    self.backend.data['theme']=name;self.backend.save();use_theme(name)
+    self.setup_theme();self.configure(bg=BG);self.clear(self);self.build_shell();self.navigate(self.active)
+ def show_smart_scan(self):
+    '''Read-only evaluation; no background edits or silent bulk changes.'''
+    results=[]
+    for key,reason in [('game_dvr','Background game capture can consume resources during play; disable only if you do not use clips.'),
+                       ('transparency','Disabling transparency may make older or constrained PCs feel more responsive.'),
+                       ('taskbar_anim','Turning off taskbar animations is a preference, not a guaranteed speed boost.')]:
+        if key not in TW:continue
+        try:
+            if not self.backend.enabled(key):results.append((key,reason))
+        except Exception:continue
+    power=self.backend.current_power()
+    if power and power!=POWER_SCHEMES.get('Balanced'):
+        results.append((None,'A non-Balanced power plan is active. Review it if you prefer efficiency, but no change is proposed automatically.'))
+    win=tk.Toplevel(self);win.title('Smart Scan — Review suggestions');win.configure(bg=BG);win.geometry('820x560');win.transient(self)
+    self.label(win,'SMART OPTIMIZATION SCAN',20,TXT,True).pack(anchor='w',padx=22,pady=(18,7))
+    self.label(win,'Read-only scan • Approve each suggestion • A backup is created before applying.',10,MUTED).pack(anchor='w',padx=22,pady=(0,16))
+    container=tk.Frame(win,bg=BG);container.pack(fill='both',expand=True,padx=22)
+    choices={}
+    for key,reason in results:
+        box=tk.Frame(container,bg=PANEL2);box.pack(fill='x',pady=5)
+        title=TW[key].name if key else 'Power plan review'
+        self.label(box,title,12,TXT,True).pack(anchor='w',padx=12,pady=(8,2))
+        self.label(box,reason,10,MUTED,wraplength=730,justify='left').pack(anchor='w',padx=12)
+        if key:
+            choices[key]=tk.BooleanVar(value=False)
+            tk.Checkbutton(box,text='Approve change',variable=choices[key],bg=PANEL2,fg=TXT,selectcolor=PANEL,activebackground=PANEL2,activeforeground=TXT).pack(anchor='w',padx=12,pady=6)
+    if not results:self.label(container,'No supported quick-scan suggestions found. This does not imply perfect system optimization.',11,MUTED).pack(anchor='w')
+    def apply_selected():
+        chosen={k:True for k,v in choices.items() if v.get()}
+        if not chosen:return messagebox.showinfo('No changes selected','Select at least one change or close this window.',parent=win)
+        if not messagebox.askyesno('Confirm approved changes',f'Apply {len(chosen)} approved settings? A restore snapshot will be saved.',parent=win):return
+        try:
+            self.backend.apply(chosen,label='Smart Scan approved changes')
+            messagebox.showinfo('Applied','Selected changes applied; previous values saved for rollback.',parent=win);win.destroy()
+        except Exception as exc:messagebox.showerror('Unable to apply',str(exc),parent=win)
+    self.btn(win,'Apply approved changes',apply_selected,True).pack(anchor='e',padx=22,pady=15)
+ def _toast_update(self,release):
+    if self.update_toast and self.update_toast.winfo_exists():self.update_toast.destroy()
+    toast=tk.Frame(self,bg=PANEL2,highlightthickness=1,highlightbackground=ACC)
+    toast.place(relx=1.0,x=-20,y=52,anchor='ne',width=355)
+    self.update_toast=toast
+    row=tk.Frame(toast,bg=PANEL2);row.pack(fill='x',padx=14,pady=(12,4))
+    self.label(row,'NEW UPDATE  •  v'+release['version'],11,TXT,True).pack(side='left')
+    self.btn(row,'×',toast.destroy).pack(side='right')
+    self.label(toast,release.get('notes','New version available')[:130],9,MUTED,wraplength=315,justify='left').pack(anchor='w',padx=14,pady=(3,9))
+    self.btn(toast,'Update & Restart  →',self.install_update,True).pack(fill='x',padx=14,pady=(0,12))
+ def check_updates_background(self):
+    if self.update_busy:return
+    url=self.backend.data.get('update_manifest','https://github.com/lolipopkins/ModeShift/releases/latest/download/latest.json')
+    try:updater.safe_https(url)
+    except ValueError:return
+    self.update_busy=True
+    def job():
+        try:
+            result=updater.check(url)
+            def done():
+                self.update_busy=False;self.update_release=result if result['available'] else None
+                if result['available']:self._toast_update(result)
+            self.after(0,done)
+        except Exception as e:
+            log('Update check unavailable: '+str(e)[:250]);self.after(0,lambda:setattr(self,'update_busy',False))
+    threading.Thread(target=job,daemon=True).start()
  def save_update_url(self):
     value=self.update_url.get().strip()
     if value:
@@ -1083,17 +1169,28 @@ class App(tk.Tk):
     if not release or self.update_busy:return
     if not getattr(sys,'frozen',False) or not on_windows():
         return messagebox.showinfo('Portable Windows EXE required','First launch the packaged ModeShift.exe on Windows. Source launches cannot self-update.')
-    if not messagebox.askyesno('Confirm update','Install ModeShift '+release['version']+'?\n\nThe verified application EXE will replace your current portable EXE. Your presets and snapshots in AppData are preserved. The prior EXE will be kept as a backup.'):
+    if not messagebox.askyesno('Update & Restart','Install ModeShift '+release['version']+' and restart the app?\n\nPlease save any work first. Current running render jobs will not be stopped. Your profiles, settings and snapshots will be preserved.'):
         return
     self.update_busy=True;self._update_ui('Downloading and verifying update…')
     def job():
         try:
             folder=ROOT/'updates';folder.mkdir(parents=True,exist_ok=True)
-            staged=updater.download_verified(release,folder/'ModeShift-update.exe')
+            installed=(Path(sys.executable).parent / 'unins000.exe').is_file()
+            if installed:
+                installer_url=release.get('installer_url')
+                installer_hash=release.get('installer_sha256')
+                if not installer_url or not installer_hash:
+                    raise ValueError('Release has no verified installer; the installed app cannot use the portable update.')
+                staged=updater.download_verified({'url':installer_url,'sha256':installer_hash},folder/'ModeShiftSetup-update.exe')
+            else:
+                staged=updater.download_verified(release,folder/'ModeShift-update.exe')
             def install():
                 try:
                     self.telemetry.stop();self.end_auto_power()
-                    updater.start_replacement(sys.executable,staged,release['sha256'],folder)
+                    if installed:
+                        updater.start_installer_upgrade(sys.executable,staged,installer_hash,folder)
+                    else:
+                        updater.start_replacement(sys.executable,staged,release['sha256'],folder)
                     self.destroy()
                 except Exception as exc:
                     self.update_busy=False;messagebox.showerror('Installation failed',str(exc))
