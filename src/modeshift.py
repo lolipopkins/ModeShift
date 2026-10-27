@@ -766,7 +766,7 @@ class App(tk.Tk):
     self.listframe=tk.Frame(self.canvas,bg=BG);wid=self.canvas.create_window((0,0),window=self.listframe,anchor='nw')
     self.listframe.bind('<Configure>',lambda e:self.canvas.configure(scrollregion=self.canvas.bbox('all')))
     self.canvas.bind('<Configure>',lambda e:self.canvas.itemconfigure(wid,width=e.width))
-    self.canvas.bind('<MouseWheel>',lambda e:self.canvas.yview_scroll(int(-e.delta/120),'units'))
+    self._set_scroll_canvas(self.canvas)
     self.refresh_tweaks()
  def change_category(self,c):self.category=c;self.navigate('Optimizations')
  def refresh_tweaks(self):
@@ -822,7 +822,7 @@ class App(tk.Tk):
     grid=tk.Frame(cv,bg=BG);w=cv.create_window((0,0),window=grid,anchor='nw')
     grid.bind('<Configure>',lambda e:cv.configure(scrollregion=cv.bbox('all')))
     cv.bind('<Configure>',lambda e:cv.itemconfigure(w,width=e.width))
-    cv.bind('<MouseWheel>',lambda e:cv.yview_scroll(int(-e.delta/120),'units'))
+    self._set_scroll_canvas(cv)
     for i,(name,data) in enumerate(self.backend.data['profiles'].items()):
         c=self.card(grid);c.grid(row=i//3,column=i%3,sticky='nsew',padx=7,pady=8)
         self.label(c,name,16,TXT,True).pack(anchor='w',padx=17,pady=(18,8))
@@ -870,7 +870,7 @@ class App(tk.Tk):
     container=tk.Frame(cv,bg=BG);w=cv.create_window((0,0),window=container,anchor='nw')
     container.bind('<Configure>',lambda e:cv.configure(scrollregion=cv.bbox('all')))
     cv.bind('<Configure>',lambda e:cv.itemconfigure(w,width=e.width))
-    cv.bind('<MouseWheel>',lambda e:cv.yview_scroll(int(-e.delta/120),'units'))
+    self._set_scroll_canvas(cv)
     for i in range(len(h)-1,-1,-1):
         s=h[i];r=self.card(container);r.pack(fill='x',pady=5)
         left=tk.Frame(r,bg=PANEL);left.pack(side='left',padx=14,pady=12)
