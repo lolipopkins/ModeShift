@@ -1,0 +1,1 @@
+Release request: ModeShift v0.6.1 UI modernization and smooth scrolling. Publish installer only after tests and build pass.
