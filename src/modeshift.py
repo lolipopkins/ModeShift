@@ -1205,15 +1205,32 @@ class App(tk.Tk):
         except Exception as exc:messagebox.showerror('Unable to apply',str(exc),parent=win)
     self.btn(win,'Apply approved changes',apply_selected,True).pack(anchor='e',padx=22,pady=15)
  def _toast_update(self,release):
-    if self.update_toast and self.update_toast.winfo_exists():self.update_toast.destroy()
-    toast=tk.Frame(self,bg=PANEL2,highlightthickness=1,highlightbackground=ACC)
-    toast.place(relx=1.0,x=-20,y=52,anchor='ne',width=355)
+    if self.update_toast and self.update_toast.winfo_exists():
+        self.update_toast.destroy()
+    # A rounded floating surface, independent of the square default Tk widgets.
+    w,h,r=380,210,20
+    toast=tk.Canvas(self,width=w,height=h,bg=BG,highlightthickness=0,borderwidth=0)
+    toast.place(relx=1.0,x=-18,y=55,anchor='ne')
     self.update_toast=toast
-    row=tk.Frame(toast,bg=PANEL2);row.pack(fill='x',padx=14,pady=(12,4))
-    self.label(row,'NEW UPDATE  •  v'+release['version'],11,TXT,True).pack(side='left')
-    self.btn(row,'×',toast.destroy).pack(side='right')
-    self.label(toast,release.get('notes','New version available')[:130],9,MUTED,wraplength=315,justify='left').pack(anchor='w',padx=14,pady=(3,9))
-    self.btn(toast,'Update & Restart  →',self.install_update,True).pack(fill='x',padx=14,pady=(0,12))
+    surface=PANEL2
+    pts=[r,0,w-r,0,w,0,w,r,w,h-r,w,h,w-r,h,r,h,0,h,0,h-r,0,r,0,0]
+    # Smooth polygon gives the Windows card visibly rounded corners.
+    toast.create_polygon(pts,smooth=True,splinesteps=18,fill=surface,outline=surface)
+    toast.create_oval(20,20,49,49,fill=ACC,outline='')
+    toast.create_text(34,34,text='↑',fill=BG,font=(FONT,15,'bold'))
+    toast.create_text(61,23,text='Update available',anchor='nw',fill=TXT,font=(FONT,13,'bold'))
+    toast.create_text(61,47,text='ModeShift  v'+release['version'],anchor='nw',fill=ACC,font=(FONT,10))
+    close=tk.Label(toast,text='✕',bg=surface,fg=MUTED,cursor='hand2',font=(FONT,11))
+    toast.create_window(w-29,28,window=close)
+    close.bind('<Button-1>',lambda e:toast.destroy())
+    toast.create_line(20,79,w-20,79,fill=LINE)
+    toast.create_text(22,93,text='A newer version is ready to install.',anchor='nw',fill=TXT,font=(FONT,10))
+    toast.create_text(22,118,text='Your profiles and settings stay saved.',anchor='nw',fill=MUTED,font=(FONT,9))
+    apply=self.btn(toast,'Update & Restart  ↗',self.install_update,True)
+    toast.create_window(22,160,window=apply,anchor='nw',width=222,height=36)
+    later=tk.Label(toast,text='Remind me later',bg=surface,fg=MUTED,cursor='hand2',font=(FONT,9))
+    toast.create_window(w-88,179,window=later)
+    later.bind('<Button-1>',lambda e:toast.destroy())
  def check_updates_background(self):
     if self.update_busy:return
     url=self.backend.data.get('update_manifest','https://github.com/lolipopkins/ModeShift/releases/latest/download/latest.json')
