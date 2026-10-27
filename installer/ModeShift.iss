@@ -33,7 +33,7 @@ RestartApplications=no
 UsePreviousAppDir=no
 
 [Files]
-Source: "..\dist\ModeShift.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\ModeShift\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
