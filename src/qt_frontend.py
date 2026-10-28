@@ -55,6 +55,7 @@ class Trends(QWidget):
 class UpdateSignals(QObject):
     ready=Signal(object)
     error=Signal(str)
+    staged=Signal(object,object,object,object)
 
 class Window(QMainWindow):
     def __init__(self):
@@ -103,6 +104,7 @@ class Window(QMainWindow):
         self.update_signals=UpdateSignals()
         self.update_signals.ready.connect(self.update_available)
         self.update_signals.error.connect(self.update_error)
+        self.update_signals.staged.connect(self.launch_staged_update)
         self.available_release=None
         for name in self.page_names:
             builder=getattr(self,'build_'+name.lower())
@@ -171,8 +173,8 @@ class Window(QMainWindow):
         page,l=self.view()
         block=card();v=QVBoxLayout(block)
         v.addWidget(QLabel('AUTOMATIC WORKLOAD RECOGNITION'))
-        v.addWidget(QLabel('Only power-plan switching is automatic. System tweaks need your approval.'))
-        self.auto_switch=QCheckBox('Enable automatic workload detection and power switching')
+        v.addWidget(QLabel('Qt preview: detect workloads and recommend a matching profile; no automatic system changes.'))
+        self.auto_switch=QCheckBox('Enable workload detection (recommendations only in Qt preview)')
         self.auto_switch.setChecked(bool(self.backend.data['automation']['enabled']))
         self.auto_switch.toggled.connect(self.save_automation)
         v.addWidget(self.auto_switch)
@@ -364,16 +366,18 @@ class Window(QMainWindow):
             try:
                 staged=updater.download_verified({'url':url,'sha256':digest},
                     folder/('ModeShiftSetup-update.exe' if installed else 'ModeShift-update.exe'))
-                def launch():
-                    try:
-                        if installed:updater.start_installer_upgrade(sys.executable,staged,digest,folder)
-                        else:updater.start_replacement(sys.executable,staged,digest,folder)
-                        self.close()
-                    except Exception as exc:self.update_error(str(exc));self.install_busy=False
-                QTimer.singleShot(0,self,launch)
+                self.update_signals.staged.emit(installed,staged,digest,folder)
             except Exception as exc:
                 self.update_signals.error.emit(str(exc))
         threading.Thread(target=work,daemon=True).start()
+    def launch_staged_update(self,installed,staged,digest,folder):
+        try:
+            if installed:updater.start_installer_upgrade(sys.executable,staged,digest,folder)
+            else:updater.start_replacement(sys.executable,staged,digest,folder)
+            self.close()
+        except Exception as exc:
+            self.install_busy=False
+            self.update_error(str(exc))
     def closeEvent(self,event):
         self.telemetry.stop();super().closeEvent(event)
 
