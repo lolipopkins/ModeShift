@@ -1224,30 +1224,42 @@ class App(tk.Tk):
  def _toast_update(self,release):
     if self.update_toast and self.update_toast.winfo_exists():
         self.update_toast.destroy()
-    # A rounded floating surface, independent of the square default Tk widgets.
-    w,h,r=380,210,20
-    toast=tk.Canvas(self,width=w,height=h,bg=BG,highlightthickness=0,borderwidth=0)
+    # Single-canvas overlay: no embedded Canvas widgets, black backgrounds or
+    # resize-dependent button graphics that can clip inside create_window().
+    w,h=372,202
+    toast=tk.Canvas(self,width=w,height=h,bg=BG,highlightthickness=0,bd=0)
     toast.place(relx=1.0,x=-18,y=55,anchor='ne')
     self.update_toast=toast
-    surface=PANEL2
-    pts=[r,0,w-r,0,w,0,w,r,w,h-r,w,h,w-r,h,r,h,0,h,0,h-r,0,r,0,0]
-    # Smooth polygon gives the Windows card visibly rounded corners.
-    toast.create_polygon(pts,smooth=True,splinesteps=18,fill=surface,outline=surface)
-    toast.create_oval(20,20,49,49,fill=ACC,outline='')
-    toast.create_text(34,34,text='↑',fill=BG,font=(FONT,15,'bold'))
-    toast.create_text(61,23,text='Update available',anchor='nw',fill=TXT,font=(FONT,13,'bold'))
-    toast.create_text(61,47,text='ModeShift  v'+release['version'],anchor='nw',fill=ACC,font=(FONT,10))
-    close=tk.Label(toast,text='✕',bg=surface,fg=MUTED,cursor='hand2',font=(FONT,11))
-    toast.create_window(w-29,28,window=close)
-    close.bind('<Button-1>',lambda e:toast.destroy())
-    toast.create_line(20,79,w-20,79,fill=LINE)
-    toast.create_text(22,93,text='A newer version is ready to install.',anchor='nw',fill=TXT,font=(FONT,10))
-    toast.create_text(22,118,text='Your profiles and settings stay saved.',anchor='nw',fill=MUTED,font=(FONT,9))
-    apply=self.btn(toast,'Update & Restart  ↗',self.install_update,True)
-    toast.create_window(22,160,window=apply,anchor='nw',width=222,height=36)
-    later=tk.Label(toast,text='Remind me later',bg=surface,fg=MUTED,cursor='hand2',font=(FONT,9))
-    toast.create_window(w-88,179,window=later)
-    later.bind('<Button-1>',lambda e:toast.destroy())
+    def rounded(x1,y1,x2,y2,r,fill,tag):
+        pts=[x1+r,y1,x2-r,y1,x2,y1,x2,y1+r,
+             x2,y2-r,x2,y2,x2-r,y2,x1+r,y2,
+             x1,y2,x1,y2-r,x1,y1+r,x1,y1]
+        return toast.create_polygon(pts,smooth=True,splinesteps=16,
+                                    fill=fill,outline='',tags=(tag,))
+    rounded(1,1,w-1,h-1,18,PANEL2,'surface')
+    toast.create_oval(17,19,47,49,fill=ACC,outline='')
+    toast.create_text(32,34,text='↑',fill=BG,font=(FONT,14,'bold'))
+    toast.create_text(59,18,text='Update available',anchor='nw',
+                      fill=TXT,font=(FONT,13,'bold'))
+    toast.create_text(59,44,text='Version '+str(release['version']),anchor='nw',
+                      fill=ACC,font=(FONT,10))
+    toast.create_text(w-24,26,text='×',fill=MUTED,font=(FONT,17),
+                      tags=('dismiss',))
+    toast.create_line(18,75,w-18,75,fill=LINE)
+    toast.create_text(19,88,text='Ready to install a newer ModeShift version',
+                      anchor='nw',fill=TXT,font=(FONT,10))
+    toast.create_text(19,113,text='Your settings and presets will be kept.',
+                      anchor='nw',fill=MUTED,font=(FONT,9))
+    rounded(18,151,231,187,12,ACC,'install')
+    toast.create_text(124,169,text='Update & Restart  →',fill=BG,
+                      font=(FONT,10,'bold'),tags=('install',))
+    toast.create_text(300,169,text='Later',fill=MUTED,
+                      font=(FONT,10),tags=('dismiss',))
+    toast.tag_bind('dismiss','<Button-1>',lambda e:toast.destroy())
+    toast.tag_bind('install','<Button-1>',lambda e:self.install_update())
+    for tag in ('dismiss','install'):
+        toast.tag_bind(tag,'<Enter>',lambda e:toast.configure(cursor='hand2'))
+        toast.tag_bind(tag,'<Leave>',lambda e:toast.configure(cursor=''))
  def check_updates_background(self):
     if self.update_busy:return
     url=self.backend.data.get('update_manifest','https://github.com/lolipopkins/ModeShift/releases/latest/download/latest.json')
