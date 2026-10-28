@@ -4,7 +4,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 import updater
 class UpdateTests(unittest.TestCase):
     def test_versions(self):
-        self.assertTrue(updater.version_parts('0.7')>updater.version_parts(updater.VERSION))
+        self.assertGreater(updater.version_parts('999.0.0'),updater.version_parts(updater.VERSION))
+        self.assertLess(updater.version_parts('0.1.0'),updater.version_parts(updater.VERSION))
         with self.assertRaises(ValueError):updater.version_parts('v0.6-beta')
     def test_https_only(self):
         for url in ('http://example.com/x','file:///tmp/evil','https://u:p@example.com/a','https://example.com:444/a'):
