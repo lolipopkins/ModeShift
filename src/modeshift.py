@@ -1380,5 +1380,12 @@ class App(tk.Tk):
     self.after(1000,self.tick)
 
 if __name__=='__main__':
+    # Allows Windows Restart Manager to reopen ModeShift after Inno Setup
+    # has closed it for an approved upgrade, when supported.
+    if os.name == 'nt' and getattr(sys, 'frozen', False):
+        try:
+            ctypes.windll.kernel32.RegisterApplicationRestart('', 0)
+        except (AttributeError, OSError):
+            pass
     try:App().mainloop()
     except Exception:log('FATAL '+traceback.format_exc());raise
