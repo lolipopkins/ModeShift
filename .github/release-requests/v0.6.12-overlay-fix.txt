@@ -1,0 +1,1 @@
+Patch release 0.6.12: replace blank custom update confirmation Canvas overlay with managed modal dialog; requires Windows regression testing.
