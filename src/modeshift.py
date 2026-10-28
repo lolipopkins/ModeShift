@@ -733,7 +733,7 @@ class App(tk.Tk):
     self.label(right,'Current system insights',17,TXT,True).pack(anchor='w',padx=18,pady=(0,12))
     self.recs_frame=tk.Frame(right,bg=PANEL);self.recs_frame.pack(fill='both',expand=True)
     self.update_recommendations()
-    self.spark=tk.Canvas(p,bg=PANEL,height=86,highlightthickness=1,highlightbackground=LINE)
+    self.spark=tk.Canvas(p,bg=PANEL,height=245,highlightthickness=1,highlightbackground=LINE)
     self.spark.pack(fill='x',pady=(12,0));self.draw_spark()
  def dashboard_auto_change(self):
     self.autovar=self.quick_auto
@@ -741,18 +741,34 @@ class App(tk.Tk):
  def draw_spark(self):
     if self.active!='Dashboard' or not hasattr(self,'spark') or not self.spark.winfo_exists():return
     canvas=self.spark;canvas.delete('all')
-    w=max(50,canvas.winfo_width());h=max(60,canvas.winfo_height())
-    canvas.create_text(12,12,text='Live resource trends (up to 3 minutes):',anchor='w',fill=MUTED,font=(FONT,9))
-    for key,color,caption in [('cpu_percent',BLUE,'CPU'),('ram_percent',ACC,'RAM'),('gpu_percent',GOOD,'GPU')]:
-        vals=[(x['time'],x[key]) for x in self.samples if x.get(key) is not None]
-        if len(vals)>1:
-            x0=vals[0][0];range_t=max(1,vals[-1][0]-x0)
-            points=[]
-            for t,v in vals:
-                points.extend((12+(w-24)*(t-x0)/range_t, h-10-(h-34)*min(max(v,0),100)/100))
-            canvas.create_line(*points,fill=color,width=2,smooth=False)
-    for i,(color,text) in enumerate([(BLUE,'CPU'),(ACC,'RAM'),(GOOD,'GPU')]):
-        canvas.create_text(w-152+i*50,12,text=text,anchor='w',fill=color,font=(FONT,9,'bold'))
+    w=max(320,canvas.winfo_width());h=max(160,canvas.winfo_height())
+    left,right,top,bottom=49,w-22,48,h-32
+    canvas.create_text(19,21,text='RESOURCE USAGE',anchor='w',fill=TXT,font=(FONT,11,'bold'))
+    series=[('cpu_percent',BLUE,'CPU'),('ram_percent',ACC,'RAM'),('gpu_percent',GOOD,'GPU')]
+    latest={key:next((x[key] for x in reversed(self.samples) if x.get(key) is not None),None)
+            for key,_,_ in series}
+    for i,(key,color,name) in enumerate(series):
+        val=latest[key];label=name+'  '+(f'{val:.0f}%' if val is not None else 'N/A')
+        canvas.create_text(right-i*116,21,text=label,anchor='e',fill=color,font=(FONT,10,'bold'))
+    for pct in (0,25,50,75,100):
+        y=bottom-(bottom-top)*pct/100
+        canvas.create_line(left,y,right,y,fill=LINE,dash=(2,5))
+        canvas.create_text(left-10,y,text=str(pct)+'%',anchor='e',fill=MUTED,font=(FONT,9))
+    # Time labels refer to the fixed three-minute viewing window.
+    for elapsed,label in [(180,'-3m'),(120,'-2m'),(60,'-1m'),(0,'Now')]:
+        x=right-(right-left)*elapsed/180
+        canvas.create_text(x,bottom+16,text=label,fill=MUTED,font=(FONT,9))
+    if not self.samples:return
+    end=self.samples[-1]['time'];start=end-180
+    for key,color,_ in series:
+        vals=[(x['time'],x[key]) for x in self.samples
+              if x.get(key) is not None and x['time']>=start]
+        if len(vals)<2:continue
+        pts=[]
+        for t,v in vals:
+            pts.extend((left+(right-left)*min(1,max(0,(t-start)/180)),
+                        bottom-(bottom-top)*min(100,max(0,v))/100))
+        canvas.create_line(*pts,fill=color,width=2,smooth=True,splinesteps=8)
  def update_recommendations(self,info=None):
     if not hasattr(self,'recs_frame') or not self.recs_frame.winfo_exists():return
     self.clear(self.recs_frame)
