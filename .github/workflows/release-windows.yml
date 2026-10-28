@@ -22,7 +22,7 @@ jobs:
           cache-dependency-path: requirements-build.txt
       - name: Install build dependencies
         shell: pwsh
-        run: python -m pip install -r requirements-build.txt
+        run: python -m pip install -r requirements-build.txt -r requirements-qt-preview.txt
       - name: Test
         shell: pwsh
         run: python -m unittest discover -s tests -v
@@ -34,10 +34,42 @@ jobs:
           if ("v$version" -ne '${{ github.ref_name }}') { throw "Tag doesn't match application version $version" }
       - name: Build portable Windows EXE
         shell: pwsh
-        run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil src/modeshift.py
+        run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil --collect-all PySide6 src/qt_frontend.py
       - name: Build portable EXE separately
         shell: pwsh
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --distpath dist-portable --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil src/modeshift.py
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --distpath dist-portable --name ModeShift --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil --collect-all PySide6 src/qt_frontend.py
+      - name: Verify packaged Qt startup
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $exe = (Resolve-Path 'dist/ModeShift/ModeShift.exe').Path
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          if ($p.HasExited) { throw "Installed-layout Qt app crashed at startup (exit $($p.ExitCode))" }
+          Stop-Process -Id $p.Id -Force
+      - name: Verify Qt UI and navigation
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          @'
+          import sys
+          sys.path.insert(0,'src')
+          from PySide6.QtWidgets import QApplication
+          from qt_frontend import Window
+          app=QApplication([])
+          w=Window()
+          app.processEvents()
+          assert len(w.page_names)==9
+          for page in w.page_names:
+              w.show_page(page)
+              assert w.nav_buttons[page].property('active') is True
+          w.telemetry.stop()
+          w.close()
+          print('Qt nine-page UI smoke test passed')
+          '@ | python -
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress --yes
