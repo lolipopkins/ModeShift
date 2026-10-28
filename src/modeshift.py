@@ -1316,37 +1316,56 @@ class App(tk.Tk):
             self.after(0,lambda detail=str(exc):(setattr(self,'update_busy',False),self._update_ui('Update check failed: '+detail)))
     threading.Thread(target=job,daemon=True).start()
  def confirm_update(self):
+    """Use a real transient dialog; never place a Canvas over the dashboard."""
     release=self.update_release
     if not release or self.update_busy:return
     old=getattr(self,'update_confirm',None)
-    if old is not None and old.winfo_exists():old.destroy()
-    w,h=440,264
-    dialog=tk.Canvas(self,width=w,height=h,bg=BG,highlightthickness=0,bd=0)
-    dialog.place(relx=.5,rely=.5,anchor='center')
-    dialog.lift()
-    self.update_confirm=dialog
-    def pill(x1,y1,x2,y2,r,color,tag):
-        pts=[x1+r,y1,x2-r,y1,x2,y1,x2,y1+r,x2,y2-r,x2,y2,
-             x2-r,y2,x1+r,y2,x1,y2,x1,y2-r,x1,y1+r,x1,y1]
-        dialog.create_polygon(pts,fill=color,outline='',smooth=True,splinesteps=16,tags=(tag,))
-    pill(1,1,w-1,h-1,18,PANEL2,'surface')
-    dialog.create_oval(23,24,61,62,fill=ACC,outline='')
-    dialog.create_text(42,43,text='↻',fill=BG,font=(FONT,17,'bold'))
-    dialog.create_text(75,23,text='Ready to update?',anchor='nw',fill=TXT,font=(FONT,17,'bold'))
-    dialog.create_text(75,54,text='ModeShift  v'+str(release['version']),anchor='nw',fill=ACC,font=(FONT,11))
-    dialog.create_line(22,92,w-22,92,fill=LINE)
-    dialog.create_text(24,108,text='ModeShift will close and install the verified update.',anchor='nw',fill=TXT,font=(FONT,10))
-    dialog.create_text(24,139,text='Save your work first. Active rendering jobs are not stopped.',anchor='nw',fill=MUTED,font=(FONT,9))
-    dialog.create_text(24,158,text='Your profiles, snapshots and settings will be preserved.',anchor='nw',fill=MUTED,font=(FONT,9))
-    pill(22,207,252,247,12,ACC,'confirm')
-    dialog.create_text(137,227,text='Update & Restart  →',fill=BG,font=(FONT,11,'bold'),tags=('confirm',))
-    pill(265,207,418,247,12,PANEL,'cancel')
-    dialog.create_text(341,227,text='Not now',fill=TXT,font=(FONT,10,'bold'),tags=('cancel',))
-    dialog.tag_bind('cancel','<Button-1>',lambda e:dialog.destroy())
-    dialog.tag_bind('confirm','<Button-1>',lambda e:(dialog.destroy(),self.install_update(confirmed=True)))
-    for tag in ('confirm','cancel'):
-        dialog.tag_bind(tag,'<Enter>',lambda e:dialog.configure(cursor='hand2'))
-        dialog.tag_bind(tag,'<Leave>',lambda e:dialog.configure(cursor=''))
+    if old is not None:
+        try:
+            if old.winfo_exists():
+                old.lift();old.focus_force();return
+        except tk.TclError:pass
+    win=tk.Toplevel(self)
+    self.update_confirm=win
+    win.title('ModeShift — Confirm update')
+    win.configure(bg=PANEL)
+    win.resizable(False,False)
+    win.transient(self)
+    win.protocol('WM_DELETE_WINDOW',win.destroy)
+    width,height=468,252
+    self.update_idletasks()
+    x=self.winfo_rootx()+max(0,(self.winfo_width()-width)//2)
+    y=self.winfo_rooty()+max(0,(self.winfo_height()-height)//2)
+    win.geometry(f'{width}x{height}+{x}+{y}')
+    body=tk.Frame(win,bg=PANEL)
+    body.pack(fill='both',expand=True,padx=24,pady=20)
+    tk.Label(body,text='Update ModeShift?',bg=PANEL,fg=TXT,
+             font=(FONT,17,'bold'),anchor='w').pack(fill='x',pady=(0,6))
+    tk.Label(body,text='Version '+str(release['version'])+' is ready to install',
+             bg=PANEL,fg=ACC,font=(FONT,11),anchor='w').pack(fill='x')
+    tk.Frame(body,bg=LINE,height=1).pack(fill='x',pady=16)
+    tk.Label(body,text='ModeShift will close to install this update.',
+             bg=PANEL,fg=TXT,font=(FONT,10),anchor='w').pack(fill='x')
+    tk.Label(body,text='Save ongoing work first. Your presets and snapshots stay saved.',
+             bg=PANEL,fg=MUTED,font=(FONT,9),anchor='w',wraplength=405,
+             justify='left').pack(fill='x',pady=(6,0))
+    actions=tk.Frame(body,bg=PANEL)
+    actions.pack(side='bottom',fill='x')
+    def approved():
+        win.destroy()
+        if self.update_confirm is win:self.update_confirm=None
+        self.install_update(confirmed=True)
+    tk.Button(actions,text='Update & Restart',command=approved,
+              bg=ACC,fg=BG,activebackground='#ffc261',activeforeground=BG,
+              relief='flat',borderwidth=0,font=(FONT,10,'bold'),
+              padx=18,pady=11,cursor='hand2').pack(side='left')
+    tk.Button(actions,text='Not now',command=win.destroy,
+              bg=PANEL2,fg=TXT,activebackground=LINE,activeforeground=TXT,
+              relief='flat',borderwidth=0,font=(FONT,10),
+              padx=18,pady=11,cursor='hand2').pack(side='right')
+    win.bind('<Escape>',lambda e:win.destroy())
+    win.grab_set()
+    win.focus_force()
  def install_update(self,confirmed=False):
     release=self.update_release
     if not release or self.update_busy:return
