@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,QPushButton,QFrame,QScrollArea,QStackedWidget,QMessageBox,
     QComboBox,QLineEdit,QCheckBox,QSizePolicy,QGraphicsDropShadowEffect,QFileDialog
 )
-from modeshift import Backend,TelemetrySampler,TW,POWER_SCHEMES, recommendations, recommend_profile, assess_unattended, GUARD_DEFAULTS, ROOT, persist, AUTOMATION_DEFAULTS
+from modeshift import Backend,TelemetrySampler,TW,POWER_SCHEMES, recommendations, recommend_profile, assess_unattended, GUARD_DEFAULTS, ROOT, persist, AUTOMATION_DEFAULTS, GUARD_FILE, write_guard_event
 import updater
 
 STYLES={
@@ -101,6 +101,7 @@ class Window(QMainWindow):
         self.metric={}
         self.recording=False
         self.recorded=[]
+        self.last_guard_log=0.0
         self.update_signals=UpdateSignals()
         self.update_signals.ready.connect(self.update_available)
         self.update_signals.error.connect(self.update_error)
@@ -304,7 +305,12 @@ class Window(QMainWindow):
                 self.measure_status.setText(f'Recording: {len(self.recorded)} samples')
         if self.backend.data['unattended_guard']['enabled']:
             findings=assess_unattended(info,self.backend.data['unattended_guard'])
-            self.guard_status.setText('\\n'.join(f'{level}: {message}' for level,message in findings) or 'No resource threshold exceeded.')
+            self.guard_status.setText('\n'.join(f'{level}: {message}' for level,message in findings) or 'No resource threshold exceeded.')
+            now=time.monotonic()
+            if now-self.last_guard_log>=max(20,self.backend.data['unattended_guard']['log_interval_s']):
+                try:write_guard_event(GUARD_FILE,info,findings)
+                except OSError as exc:self.statusBar().showMessage('Guard log unavailable: '+str(exc),8000)
+                self.last_guard_log=now
         if self.backend.data['automation']['enabled']:
             choice=recommend_profile(info.get('workloads') or [],self.backend.data['automation']['mapping'],self.backend.data['profiles'])
             self.auto_status.setText('Detected: '+(', '.join(info.get('workloads') or []) or 'Idle')+' · Suggested: '+str(choice or 'Balanced'))
@@ -339,7 +345,7 @@ class Window(QMainWindow):
             except Exception as exc:self.update_signals.error.emit(str(exc))
         threading.Thread(target=work,daemon=True).start()
     def update_error(self,error):
-        self.update_check_busy=False;self.update_btn.setText('↻  Check updates')
+        self.update_check_busy=False;self.install_busy=False;self.update_btn.setText('↻  Check updates')
         self.statusBar().showMessage('Update check unavailable: '+error[:130],10000)
     def update_available(self,release):
         self.update_check_busy=False;self.update_btn.setText('↻  Check updates')
@@ -347,7 +353,7 @@ class Window(QMainWindow):
             self.statusBar().showMessage('ModeShift is up to date',7000);return
         self.available_release=release
         answer=QMessageBox.question(self,'Update available',
-            f"ModeShift {release['version']} is available.\\n\\nInstall and restart?\\nSave any active work before updating.",
+            f"ModeShift {release['version']} is available.\n\nInstall and restart?\nSave any active work before updating.",
             QMessageBox.Yes|QMessageBox.No,QMessageBox.No)
         if answer==QMessageBox.Yes:self.install_update(release)
     def install_update(self,release):
