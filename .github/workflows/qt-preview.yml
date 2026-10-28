@@ -36,6 +36,11 @@ jobs:
           win = Window()
           app.processEvents()
           assert win.pages.count() == 6
+          assert len(win.nav_buttons) == 6
+          win.show_page('Presets')
+          assert win.nav_buttons['Presets'].property('active') is True
+          win.show_page('Dashboard')
+          assert win.nav_buttons['Dashboard'].property('active') is True
           win.telemetry.stop()
           win.close()
           print("Qt frontend constructed successfully")
