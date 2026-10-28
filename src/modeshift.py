@@ -1304,13 +1304,45 @@ class App(tk.Tk):
         except Exception as exc:
             self.after(0,lambda detail=str(exc):(setattr(self,'update_busy',False),self._update_ui('Update check failed: '+detail)))
     threading.Thread(target=job,daemon=True).start()
- def install_update(self):
+ def confirm_update(self):
     release=self.update_release
     if not release or self.update_busy:return
+    old=getattr(self,'update_confirm',None)
+    if old is not None and old.winfo_exists():old.destroy()
+    w,h=440,264
+    dialog=tk.Canvas(self,width=w,height=h,bg=BG,highlightthickness=0,bd=0)
+    dialog.place(relx=.5,rely=.5,anchor='center')
+    dialog.lift()
+    self.update_confirm=dialog
+    def pill(x1,y1,x2,y2,r,color,tag):
+        pts=[x1+r,y1,x2-r,y1,x2,y1,x2,y1+r,x2,y2-r,x2,y2,
+             x2-r,y2,x1+r,y2,x1,y2,x1,y2-r,x1,y1+r,x1,y1]
+        dialog.create_polygon(pts,fill=color,outline='',smooth=True,splinesteps=16,tags=(tag,))
+    pill(1,1,w-1,h-1,18,PANEL2,'surface')
+    dialog.create_oval(23,24,61,62,fill=ACC,outline='')
+    dialog.create_text(42,43,text='↻',fill=BG,font=(FONT,17,'bold'))
+    dialog.create_text(75,23,text='Ready to update?',anchor='nw',fill=TXT,font=(FONT,17,'bold'))
+    dialog.create_text(75,54,text='ModeShift  v'+str(release['version']),anchor='nw',fill=ACC,font=(FONT,11))
+    dialog.create_line(22,92,w-22,92,fill=LINE)
+    dialog.create_text(24,108,text='ModeShift will close and install the verified update.',anchor='nw',fill=TXT,font=(FONT,10))
+    dialog.create_text(24,139,text='Save your work first. Active rendering jobs are not stopped.',anchor='nw',fill=MUTED,font=(FONT,9))
+    dialog.create_text(24,158,text='Your profiles, snapshots and settings will be preserved.',anchor='nw',fill=MUTED,font=(FONT,9))
+    pill(22,207,252,247,12,ACC,'confirm')
+    dialog.create_text(137,227,text='Update & Restart  →',fill=BG,font=(FONT,11,'bold'),tags=('confirm',))
+    pill(265,207,418,247,12,PANEL,'cancel')
+    dialog.create_text(341,227,text='Not now',fill=TXT,font=(FONT,10,'bold'),tags=('cancel',))
+    dialog.tag_bind('cancel','<Button-1>',lambda e:dialog.destroy())
+    dialog.tag_bind('confirm','<Button-1>',lambda e:(dialog.destroy(),self.install_update(confirmed=True)))
+    for tag in ('confirm','cancel'):
+        dialog.tag_bind(tag,'<Enter>',lambda e:dialog.configure(cursor='hand2'))
+        dialog.tag_bind(tag,'<Leave>',lambda e:dialog.configure(cursor=''))
+ def install_update(self,confirmed=False):
+    release=self.update_release
+    if not release or self.update_busy:return
+    if not confirmed:
+        return self.confirm_update()
     if not getattr(sys,'frozen',False) or not on_windows():
-        return messagebox.showinfo('Portable Windows EXE required','First launch the packaged ModeShift.exe on Windows. Source launches cannot self-update.')
-    if not messagebox.askyesno('Update & Restart','Install ModeShift '+release['version']+' and restart the app?\n\nPlease save any work first. Current running render jobs will not be stopped. Your profiles, settings and snapshots will be preserved.'):
-        return
+        return messagebox.showinfo('Packaged Windows app required','Launch the installed ModeShift application to update it.')
     self.update_busy=True;self._update_ui('Downloading and verifying update…')
     def job():
         try:
