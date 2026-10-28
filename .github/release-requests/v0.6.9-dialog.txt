@@ -1,0 +1,1 @@
+Build version 0.6.9 after replacing the native update confirmation dialog with a custom interface.
