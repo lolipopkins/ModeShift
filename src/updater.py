@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib, json, os, re, subprocess, sys, tempfile, urllib.request
 from pathlib import Path
 
-VERSION = '0.6.11'
+VERSION = '0.6.12'
 MAX_MANIFEST = 32_768
 MAX_EXE = 400 * 1024 * 1024
 
