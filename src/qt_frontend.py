@@ -1,15 +1,16 @@
 """ModeShift Qt frontend preview. Does not alter the existing Tkinter entrypoint."""
 from __future__ import annotations
-import sys
+import sys, os, threading, time, csv
+from pathlib import Path
 from collections import deque
-from PySide6.QtCore import Qt, QTimer, QPointF
+from PySide6.QtCore import Qt, QTimer, QPointF, Signal, QObject
 from PySide6.QtGui import QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QGridLayout,
     QLabel,QPushButton,QFrame,QScrollArea,QStackedWidget,QMessageBox,
-    QComboBox,QLineEdit,QCheckBox,QSizePolicy,QGraphicsDropShadowEffect
+    QComboBox,QLineEdit,QCheckBox,QSizePolicy,QGraphicsDropShadowEffect,QFileDialog
 )
-from modeshift import Backend,TelemetrySampler,TW,POWER_SCHEMES, recommendations
+from modeshift import Backend,TelemetrySampler,TW,POWER_SCHEMES, recommendations, recommend_profile, assess_unattended, GUARD_DEFAULTS, ROOT, persist, AUTOMATION_DEFAULTS
 import updater
 
 STYLES={
@@ -51,6 +52,10 @@ class Trends(QWidget):
                 if last is not None:p.drawLine(last,point)
                 last=point
 
+class UpdateSignals(QObject):
+    ready=Signal(object)
+    error=Signal(str)
+
 class Window(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -68,11 +73,11 @@ class Window(QMainWindow):
         self.nav_buttons={}
         groups=[
             ('OVERVIEW',['Dashboard','Hardware']),
-            ('WORKFLOWS',['Optimizations','Presets']),
-            ('YOUR SYSTEM',['Snapshots','Settings']),
+            ('WORKFLOWS',['Optimizations','Presets','Automation','Unattended']),
+            ('YOUR SYSTEM',['Measurements','Snapshots','Settings']),
         ]
         symbols={'Dashboard':'⌂','Hardware':'▦','Optimizations':'☷',
-                 'Presets':'◈','Snapshots':'↶','Settings':'⚙'}
+                 'Presets':'◈','Automation':'⟳','Unattended':'☾','Measurements':'▤','Snapshots':'↶','Settings':'⚙'}
         for group,names in groups:
             section=QLabel(group);section.setObjectName('section')
             nv.addWidget(section)
@@ -91,14 +96,21 @@ class Window(QMainWindow):
         top.addStretch()
         self.update_btn=QPushButton('↻  Check updates');self.update_btn.setObjectName('secondaryButton');self.update_btn.clicked.connect(self.check_updates);top.addWidget(self.update_btn)
         bl.addLayout(top);bl.addWidget(self.pages,1);self.layout.addWidget(body,1)
-        self.page_names=['Dashboard','Optimizations','Presets','Snapshots','Hardware','Settings']
+        self.page_names=['Dashboard','Optimizations','Presets','Automation','Unattended','Measurements','Snapshots','Hardware','Settings']
         self.metric={}
+        self.recording=False
+        self.recorded=[]
+        self.update_signals=UpdateSignals()
+        self.update_signals.ready.connect(self.update_available)
+        self.update_signals.error.connect(self.update_error)
+        self.available_release=None
         for name in self.page_names:
             builder=getattr(self,'build_'+name.lower())
             self.pages.addWidget(builder())
         self.theme=self.backend.data.get('theme','Amber Night')
         self.apply_theme(self.theme);self.show_page('Dashboard')
         self.timer=QTimer(self);self.timer.timeout.connect(self.refresh);self.timer.start(1700)
+        self.update_timer=QTimer(self);self.update_timer.timeout.connect(self.check_updates);self.update_timer.start(60*60*1000)
         QTimer.singleShot(3500,self.refresh)
     def wrap(self,widget):
         outer=QScrollArea();outer.setWidgetResizable(True);outer.setFrameShape(QFrame.NoFrame)
@@ -155,6 +167,66 @@ class Window(QMainWindow):
         for name in self.backend.data['profiles']:
             b=QPushButton('Apply preset: '+name);b.clicked.connect(lambda _,n=name:self.apply_preset(n));l.addWidget(b)
         l.addStretch();return self.wrap(page)
+    def build_automation(self):
+        page,l=self.view()
+        block=card();v=QVBoxLayout(block)
+        v.addWidget(QLabel('AUTOMATIC WORKLOAD RECOGNITION'))
+        v.addWidget(QLabel('Only power-plan switching is automatic. System tweaks need your approval.'))
+        self.auto_switch=QCheckBox('Enable automatic workload detection and power switching')
+        self.auto_switch.setChecked(bool(self.backend.data['automation']['enabled']))
+        self.auto_switch.toggled.connect(self.save_automation)
+        v.addWidget(self.auto_switch)
+        self.auto_status=QLabel('Waiting for a workload sample...')
+        v.addWidget(self.auto_status)
+        l.addWidget(block)
+        self.auto_mapping={}
+        for workload,profile in self.backend.data['automation']['mapping'].items():
+            row=card();h=QHBoxLayout(row);h.addWidget(QLabel(workload),1)
+            picker=QComboBox();picker.addItems(['None']+list(self.backend.data['profiles']))
+            picker.setCurrentText(profile if profile in self.backend.data['profiles'] else 'None')
+            picker.currentTextChanged.connect(lambda value,k=workload:self.set_auto_mapping(k,value))
+            h.addWidget(picker);self.auto_mapping[workload]=picker;l.addWidget(row)
+        l.addStretch();return self.wrap(page)
+    def save_automation(self,enabled):
+        self.backend.data['automation']['enabled']=bool(enabled);self.backend.save()
+    def set_auto_mapping(self,workload,value):
+        self.backend.data['automation']['mapping'][workload]=value
+        self.backend.save()
+    def build_unattended(self):
+        page,l=self.view();c=card();v=QVBoxLayout(c)
+        v.addWidget(QLabel('UNATTENDED DEVELOPMENT + RENDERING'))
+        info=QLabel('Advisory monitoring only. Never automatically kills Blender, Roblox Studio or Claude jobs.')
+        info.setWordWrap(True);v.addWidget(info)
+        self.guard_switch=QCheckBox('Enable resource pressure logging')
+        self.guard_switch.setChecked(bool(self.backend.data['unattended_guard']['enabled']))
+        self.guard_switch.toggled.connect(self.save_guard)
+        v.addWidget(self.guard_switch)
+        self.guard_status=QLabel('Waiting for a sample...')
+        self.guard_status.setWordWrap(True);v.addWidget(self.guard_status)
+        l.addWidget(c);l.addStretch();return self.wrap(page)
+    def save_guard(self,enabled):
+        self.backend.data['unattended_guard']['enabled']=bool(enabled);self.backend.save()
+    def build_measurements(self):
+        page,l=self.view();c=card();v=QVBoxLayout(c)
+        v.addWidget(QLabel('RESOURCE SESSION RECORDER'))
+        self.measure_status=QLabel('Not recording');v.addWidget(self.measure_status)
+        self.record_button=QPushButton('Start recording')
+        self.record_button.clicked.connect(self.toggle_recording);v.addWidget(self.record_button)
+        export=QPushButton('Export session as CSV');export.clicked.connect(self.export_recording)
+        v.addWidget(export);l.addWidget(c);l.addStretch();return self.wrap(page)
+    def toggle_recording(self):
+        self.recording=not self.recording
+        if self.recording:self.recorded=[]
+        self.record_button.setText('Stop recording' if self.recording else 'Start recording')
+        self.measure_status.setText('Recording...' if self.recording else f'Session captured: {len(self.recorded)} samples')
+    def export_recording(self):
+        if not self.recorded:
+            QMessageBox.information(self,'No samples','Start a recording before exporting.');return
+        filename,_=QFileDialog.getSaveFileName(self,'Export samples','modeshift-session.csv','CSV files (*.csv)')
+        if filename:
+            with open(filename,'w',newline='',encoding='utf-8') as out:
+                writer=csv.DictWriter(out,fieldnames=['time','cpu','ram','disk','gpu'])
+                writer.writeheader();writer.writerows(self.recorded)
     def build_snapshots(self):
         page,l=self.view()
         for index,item in reversed(list(enumerate(self.backend.data['history']))):
@@ -204,6 +276,8 @@ class Window(QMainWindow):
         """)
     def set_theme(self,name):
         self.theme=name;self.backend.data['theme']=name;self.backend.save();self.apply_theme(name)
+    def active_name(self):
+        return self.page_names[self.pages.currentIndex()]
     def show_page(self,name):
         self.heading.setText(name)
         self.pages.setCurrentIndex(self.page_names.index(name))
@@ -220,6 +294,18 @@ class Window(QMainWindow):
         for name,val in [('CPU',cpu),('RAM',ram),('Disk',disk),('GPU',gpu)]:
             self.metric[name].setText(f'{val:.0f}%' if val is not None else 'N/A')
         self.chart.add(info)
+        if self.recording:
+            gpus=info.get('gpus') or []
+            gpu=max((g.get('utilization') for g in gpus if g.get('utilization') is not None),default=None)
+            self.recorded.append({'time':time.time(),'cpu':cpu,'ram':ram,'disk':disk,'gpu':gpu})
+            if self.active_name()=='Measurements':
+                self.measure_status.setText(f'Recording: {len(self.recorded)} samples')
+        if self.backend.data['unattended_guard']['enabled']:
+            findings=assess_unattended(info,self.backend.data['unattended_guard'])
+            self.guard_status.setText('\\n'.join(f'{level}: {message}' for level,message in findings) or 'No resource threshold exceeded.')
+        if self.backend.data['automation']['enabled']:
+            choice=recommend_profile(info.get('workloads') or [],self.backend.data['automation']['mapping'],self.backend.data['profiles'])
+            self.auto_status.setText('Detected: '+(', '.join(info.get('workloads') or []) or 'Idle')+' · Suggested: '+str(choice or 'Balanced'))
         self.insights.setText('\n\n'.join(f'{a}: {b}' for a,b in recommendations(info)) or
                               'No major resource pressure detected.')
         self.hardware_text.setText(f"Memory: {info.get('ram_total_gib') or '?'} GiB\n"
@@ -242,7 +328,52 @@ class Window(QMainWindow):
         try:self.backend.rollback(index);QMessageBox.information(self,'Restored','Snapshot restored.')
         except Exception as exc:QMessageBox.warning(self,'Restore failed',str(exc))
     def check_updates(self):
-        QMessageBox.information(self,'Update check','The stable Tkinter build remains the supported updater until Qt parity and Windows QA are complete.')
+        if getattr(self,'update_check_busy',False):return
+        self.update_check_busy=True
+        self.update_btn.setText('Checking…')
+        url=self.backend.data.get('update_manifest') or 'https://github.com/lolipopkins/ModeShift/releases/latest/download/latest.json'
+        def work():
+            try:self.update_signals.ready.emit(updater.check(url))
+            except Exception as exc:self.update_signals.error.emit(str(exc))
+        threading.Thread(target=work,daemon=True).start()
+    def update_error(self,error):
+        self.update_check_busy=False;self.update_btn.setText('↻  Check updates')
+        self.statusBar().showMessage('Update check unavailable: '+error[:130],10000)
+    def update_available(self,release):
+        self.update_check_busy=False;self.update_btn.setText('↻  Check updates')
+        if not release.get('available'):
+            self.statusBar().showMessage('ModeShift is up to date',7000);return
+        self.available_release=release
+        answer=QMessageBox.question(self,'Update available',
+            f"ModeShift {release['version']} is available.\\n\\nInstall and restart?\\nSave any active work before updating.",
+            QMessageBox.Yes|QMessageBox.No,QMessageBox.No)
+        if answer==QMessageBox.Yes:self.install_update(release)
+    def install_update(self,release):
+        if not getattr(sys,'frozen',False) or os.name!='nt':
+            QMessageBox.information(self,'Preview mode','The Qt source preview cannot self-update.');return
+        if getattr(self,'install_busy',False):return
+        self.install_busy=True
+        self.update_btn.setText('Downloading update…')
+        installed=(Path(sys.executable).parent/'unins000.exe').is_file()
+        url=release.get('installer_url') if installed else release['url']
+        digest=release.get('installer_sha256') if installed else release['sha256']
+        if not url or not digest:
+            self.install_busy=False;self.update_error('No verified installer in release');return
+        folder=ROOT/'updates';folder.mkdir(parents=True,exist_ok=True)
+        def work():
+            try:
+                staged=updater.download_verified({'url':url,'sha256':digest},
+                    folder/('ModeShiftSetup-update.exe' if installed else 'ModeShift-update.exe'))
+                def launch():
+                    try:
+                        if installed:updater.start_installer_upgrade(sys.executable,staged,digest,folder)
+                        else:updater.start_replacement(sys.executable,staged,digest,folder)
+                        self.close()
+                    except Exception as exc:self.update_error(str(exc));self.install_busy=False
+                QTimer.singleShot(0,self,launch)
+            except Exception as exc:
+                self.update_signals.error.emit(str(exc))
+        threading.Thread(target=work,daemon=True).start()
     def closeEvent(self,event):
         self.telemetry.stop();super().closeEvent(event)
 
