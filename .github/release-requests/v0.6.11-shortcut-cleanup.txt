@@ -1,0 +1,1 @@
+Publish v0.6.11 stable Tkinter update with Ctrl+1–4 shortcut hints/bindings removed. Qt frontend remains experimental and is not the release entrypoint.
