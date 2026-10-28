@@ -35,8 +35,8 @@ jobs:
           app = QApplication([])
           win = Window()
           app.processEvents()
-          assert win.pages.count() == 6
-          assert len(win.nav_buttons) == 6
+          assert win.pages.count() == 9
+          assert len(win.nav_buttons) == 9
           win.show_page('Presets')
           assert win.nav_buttons['Presets'].property('active') is True
           win.show_page('Dashboard')
