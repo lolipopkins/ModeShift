@@ -37,6 +37,12 @@ jobs:
           app.processEvents()
           assert win.pages.count() == 9
           assert len(win.nav_buttons) == 9
+          for page in win.page_names:
+              win.show_page(page)
+              assert win.nav_buttons[page].property('active') is True
+          assert hasattr(win,'guard_switch')
+          assert hasattr(win,'auto_switch')
+          assert hasattr(win,'record_button')
           win.show_page('Presets')
           assert win.nav_buttons['Presets'].property('active') is True
           win.show_page('Dashboard')
@@ -45,3 +51,24 @@ jobs:
           win.close()
           print("Qt frontend constructed successfully")
           '@ | python -
+      - name: Install packaging tool
+        run: python -m pip install "pyinstaller>=6.10,<8"
+      - name: Build isolated Qt preview EXE
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ModeShift-Qt-Preview --icon assets/modeshift.ico --add-data "assets/modeshift.ico;assets" --collect-all psutil --collect-all PySide6 src/qt_frontend.py
+      - name: Verify packaged Qt application starts
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'dist/ModeShift-Qt-Preview/ModeShift-Qt-Preview.exe'
+          $process = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 6
+          $process.Refresh()
+          if ($process.HasExited) { throw "Packaged Qt preview exited immediately: $($process.ExitCode)" }
+          Stop-Process -Id $process.Id -Force
+      - name: Upload Windows Qt preview (not stable release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ModeShift-Qt-Windows-Preview
+          path: dist/ModeShift-Qt-Preview/
+          retention-days: 7
