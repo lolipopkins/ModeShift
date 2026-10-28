@@ -133,8 +133,23 @@ if (Test-Path -LiteralPath $exe) {{ Start-Process -FilePath $exe }}
 
 
 def start_installer_upgrade(target,installer,digest,folder):
-    if os.name!='nt':raise RuntimeError('Windows is required')
-    script=make_installer_script(target,installer,digest,os.getpid(),folder)
-    subprocess.Popen(['powershell.exe','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(script)],
-                     creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),close_fds=True)
-    return script
+    """Start the verified Inno Setup upgrader directly, without PowerShell.
+
+    The caller closes ModeShift once this process has started. Inno Setup uses
+    Restart Manager to shut down/restart registered apps when supported.
+    """
+    if os.name!='nt':
+        raise RuntimeError('Windows is required')
+    target=Path(target).resolve();installer=Path(installer).resolve()
+    if not target.is_file() or target.name.lower()!='modeshift.exe' or not installer.is_file():
+        raise ValueError('Invalid installation target')
+    if not re.fullmatch('[a-f0-9]{64}',digest):
+        raise ValueError('Invalid installer digest')
+    if hashlib.sha256(installer.read_bytes()).hexdigest()!=digest:
+        raise ValueError('Installer integrity check failed')
+    if installer.stat().st_size>MAX_EXE:
+        raise ValueError('Installer is too large')
+    # No hidden PowerShell, no execution-policy override, no Defender exclusions.
+    return subprocess.Popen([str(installer),'/SILENT','/NORESTART',
+                             '/CLOSEAPPLICATIONS','/RESTARTAPPLICATIONS'],
+                            close_fds=True)
