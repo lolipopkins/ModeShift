@@ -1,0 +1,1 @@
+Build 0.6.10 with expanded resource-usage trend graph, percent gridlines, live values, and three-minute time labels. Verify Windows rendering before adoption.
